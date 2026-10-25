@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -9,7 +10,16 @@ DEFAULT_FAQS = {
     "hours": "Our working hours are Monday to Friday, 9 AM to 5 PM.",
     "services": "We provide Python programming and software development services.",
     "contact": "You can contact us through our official website.",
-    "internship": "Please check the official website for internship updates."
+    "internship": "Please check our official website for internship updates."
+}
+
+INTENT_PATTERNS = {
+    "hours": r"\b(hours?|timings?|open|closed|business hours)\b",
+    "services": r"\b(services?|products?|offer|offers|provide)\b",
+    "contact": r"\b(contact|email|phone|support)\b",
+    "internship": r"\b(internship|internships|certificate|application)\b",
+    "time": r"\b(time|clock)\b",
+    "date": r"\b(date|today|day)\b"
 }
 
 
@@ -20,10 +30,12 @@ def load_faqs():
                 data = json.load(file)
 
             if isinstance(data, dict):
-                return {
+                faqs = DEFAULT_FAQS.copy()
+                faqs.update({
                     str(key).lower(): str(value)
                     for key, value in data.items()
-                }
+                })
+                return faqs
 
         except (json.JSONDecodeError, OSError):
             print("Warning: Could not read FAQs. Using default FAQs.")
@@ -34,33 +46,58 @@ def load_faqs():
 def get_response(message, faqs):
     message = message.lower().strip()
 
-    if message in ("hello", "hi", "hey"):
-        return "Hello! Welcome to our chatbot."
+    if not message:
+        return "Please enter a message."
 
-    elif message in ("how are you", "how are you?"):
+    if re.search(r"\b(hello|hi|hey)\b", message):
+        if message in ("hello", "hi", "hey"):
+            return "Hello! Welcome to our chatbot."
+
+    if re.search(r"\b(how are you)\b", message):
         return "I'm doing great! How can I help you?"
 
-    elif message in ("help", "what can you do"):
+    if re.search(r"\b(help|what can you do)\b", message):
         return (
-            "You can ask about our hours, services, contact, "
-            "or internship. Type 'bye' to exit."
+            "You can ask about business hours, services, contact, "
+            "internships, time, or date. Type 'bye' to exit."
         )
 
-    elif message in ("time", "what time is it"):
-        india_time = datetime.now(ZoneInfo("Asia/Kolkata"))
-        return f"The current time in India is {india_time.strftime('%I:%M %p')} IST."
-    
-    elif message in ("date", "what is the date"):
-        return f"Today's date is {datetime.now().strftime('%d-%m-%Y')}."
+    matched_intents = []
 
-    elif message in faqs:
-        return faqs[message]
+    for intent, pattern in INTENT_PATTERNS.items():
+        if re.search(pattern, message):
+            matched_intents.append(intent)
 
-    else:
-        return (
-            "Sorry, I don't understand that question. "
-            "Type 'help' to see what you can ask."
-        )
+    responses = []
+
+    for intent in matched_intents:
+        if intent == "time":
+            current_time = datetime.now(
+                ZoneInfo("Asia/Kolkata")
+            )
+            responses.append(
+                f"Current time in India: "
+                f"{current_time.strftime('%I:%M %p')} IST."
+            )
+
+        elif intent == "date":
+            current_date = datetime.now(
+                ZoneInfo("Asia/Kolkata")
+            )
+            responses.append(
+                f"Today's date is {current_date.strftime('%d-%m-%Y')}."
+            )
+
+        elif intent in faqs:
+            responses.append(faqs[intent])
+
+    if responses:
+        return "\n".join(responses)
+
+    return (
+        "Sorry, I don't understand that question. "
+        "Type 'help' to see what you can ask."
+    )
 
 
 def main():
@@ -75,12 +112,7 @@ def main():
     while True:
         user_input = input("\nYou: ").strip()
 
-        if not user_input:
-            print("Bot: Please enter a message.")
-            continue
-
-        if user_input.lower().strip() in (
-            "bye", "byee", "goodbye", "exit", "quit"):
+        if user_input.lower() in ("bye", "byee", "goodbye", "exit", "quit"):
             print("Bot: Goodbye! Have a nice day.")
             break
 
